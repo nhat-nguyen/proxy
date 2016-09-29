@@ -1,62 +1,63 @@
-import http from 'http';
-import request from 'request';
+import { destinationServer, proxyServer } from './proxy_server';
+import { spawn } from 'child_process';
+import processProxy from './proxy_process';
 import yargs from 'yargs';
 import path from 'path';
 import fs from 'fs';
 
-const defaultPort = 8000;
-
 const argv = yargs.options({
   'host': {
     type: 'string',
-    default: '127.0.0.1'
+    default: '127.0.0.1',
+    describe: 'Specify a forwarding host',
+    alias: 'x'
   },
   'logPath': {
-    type: 'string'
+    type: 'string',
+    descibe: 'Specify a output log file',
+    alias: 'l'
   },
   'port': {
     type: 'number',
+    describe: 'Specify a port number',
+    alias: 'p'
   },
   'url': {
-    type: 'string'
+    type: 'string',
+    describe: 'Specify a destination url',
+    alias: 'u'
+  },
+  'exec': {
+    describe: 'Specify a process to proxy instead',
+    alias: 'e'
   }
-}).argv;
+}).help('h').alias('help', 'h')
+.usage('Usage: babel-node index.js --presets es2015,stage-2 [options]')
+.epilogue('Thank you CoderSchool for giving me a chance to attend a bound-to-be awesome bootcamp!').argv;
 
-const logPath = argv.logPath && path.join(__dirname, argv.logPath);
-const logStream = logPath ? fs.createWriteStream(logPath) : process.stdout;
 
-let scheme = 'http://';
-let port = argv.port || (argv.host === '127.0.0.1' ? defaultPort : 80);
+if (!argv.exec) {
+  console.log('Proxy server mode...\n');
 
-const destinationUrl = argv.url || scheme + argv.host + ':' + port;
+  const defaultPort = 8000;
 
-// Echo server
-http.createServer((req, res) => {
-    console.log(`\nRequest received at: ${req.url}\n`);
+  const logPath = argv.logPath && path.join(__dirname, argv.logPath),
+        logStream = logPath ? fs.createWriteStream(logPath) : process.stdout,
 
-    req.pipe(res);
-    for (let header in req.headers) {
-        res.setHeader(header, req.headers[header])
-    }
+        port = argv.port || (argv.host === '127.0.0.1' ? defaultPort : 80),
+        destinationUrl = argv.url || 'http://' + argv.host + ':' + port;
 
-}).listen(defaultPort);
+  destinationServer.listen(defaultPort);
+  proxyServer(destinationUrl, logStream).listen(8001);
+}
 
-// Proxy server
-http.createServer((req, res) => {
-  let url = req.headers['x-destination-url'] || destinationUrl;
+else {
+  // Process proxy mode
+  let excludedArguments = ['host', 'x', 'logPath', 'l', 'port', 'p', 'url', 'u',
+                           'exec', 'e', 'help', 'h', 'presets', '$0', '_'],
 
-  console.log(`\nProxying request to: ${url + req.url}\n`);
+      args = processProxy.getArguments(argv, excludedArguments),
+      destinationProcess = spawn(argv.exec, args.concat(argv._));
 
-  let options = {
-      headers: req.headers,
-      url:  url + req.url,
-      method: req.method
-  };
-
-  let downstreamResponse = req.pipe(request(options));
-  logStream.write(`\nRequest headers:\n\n
-                  ${JSON.stringify(downstreamResponse.headers, null, 2)} \n`);
-  downstreamResponse.pipe(logStream, {end: false});
-  downstreamResponse.pipe(res);
-
-}).listen(8001);
+  processProxy.proxyTo(destinationProcess);
+}
