@@ -8,7 +8,9 @@ class ProcessProxy {
     // Takes yargs's argv object and returned a processed argument array
     // I have yet to find an elegant way to do this, as the arguments received
     // from yargs are all mixed up (babel-node's, nodemon's arguments are all
-    // received). So for now, these will all simply be excluded
+    // received). So for now, these will all simply be excluded. This would not
+    // work if any of the arguments used by the proxied process happen to be 
+    // in `excludedKeys` array
     getArguments(argv, excludedKeys) {
         var args = Object.keys(argv).filter(function (key) {
             return excludedKeys.indexOf(key) == -1;
